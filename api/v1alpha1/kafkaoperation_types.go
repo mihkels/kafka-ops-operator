@@ -72,6 +72,14 @@ type KafkaOperationSpec struct {
 	// Timeout for the operation
 	// +kubebuilder:default=30
 	Timeout int `json:"timeoutSeconds,omitempty"`
+
+	// Username for Kafka client
+	// +kubebuilder:default=""
+	Username string `json:"username,omitempty"`
+
+	// Whether to use TLS
+	// +kubebuilder:default=false
+	UseTls bool `json:"useTls,omitempty"`
 }
 
 type OperationState string

@@ -1,10 +1,5 @@
-# config/test/deployment_patch.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kafka-ops-operator-controller-manager
-spec:
-  template:
-    spec:
-      containers:
-        - name: "mihkels/kafka-ops-operator:1.0.0"
+  name: controller-manager
+  namespace: kafka-system

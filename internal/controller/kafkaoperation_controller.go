@@ -63,6 +63,7 @@ type KafkaOperationReconciler struct {
 // +kubebuilder:rbac:groups=operations.kafkaops.io,resources=kafkaoperations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operations.kafkaops.io,resources=kafkaoperations/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operations.kafkaops.io,resources=kafkaoperations/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -158,7 +159,6 @@ func (r *KafkaOperationReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return result, reconcileErr
 }
 
-// New helper function to handle state transitions
 func (r *KafkaOperationReconciler) processStateChange(ctx context.Context,
 	operation *operationsv1alpha1.KafkaOperation, logger logr.Logger) (ctrl.Result, error) {
 
@@ -192,7 +192,6 @@ func (r *KafkaOperationReconciler) processStateChange(ctx context.Context,
 	}
 
 	if operation.Status.State == operationsv1alpha1.OperationStateInProgress {
-		// Check context again before proceeding with operation
 		select {
 		case <-ctx.Done():
 			logger.Info("Context cancelled before processing operation")
@@ -608,12 +607,21 @@ func (r *KafkaOperationReconciler) handleOperationError(ctx context.Context,
 
 func (r *KafkaOperationReconciler) loadKafkaTLSConfig(
 	ctx context.Context,
-	namespace, clusterName string,
+	operation *operationsv1alpha1.KafkaOperation,
+	namespace string,
 	kafkaConfig *sarama.Config,
 ) error {
-	secretName := fmt.Sprintf("%s-user", clusterName)
-	var userSecret corev1.Secret
+	secretName := ""
+	if operation.Spec.Username != "" {
+		secretName = operation.Spec.Username
+	} else {
+		secretName = r.Config.KafkaAuthUser
+		if secretName == "" {
+			return fmt.Errorf("KAFKA_AUTH_USER environment variable is not set")
+		}
+	}
 
+	var userSecret corev1.Secret
 	if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: secretName}, &userSecret); err != nil {
 		return fmt.Errorf("failed to get Kafka user secret %s in namespace %s: %w", secretName, namespace, err)
 	}
@@ -636,17 +644,20 @@ func (r *KafkaOperationReconciler) loadKafkaTLSConfig(
 	}
 
 	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caPool,
-		MinVersion:   tls.VersionTLS12, // Ensure TLS 1.2 or higher
+		Certificates:       []tls.Certificate{cert},
+		RootCAs:            caPool,
+		MinVersion:         tls.VersionTLS12, // Ensure TLS 1.2 or higher
+		InsecureSkipVerify: true,
 	}
 	kafkaConfig.Net.TLS.Enable = true
 	kafkaConfig.Net.TLS.Config = tlsConfig
+
 	return nil
 }
 
 func (r *KafkaOperationReconciler) defaultGetKafkaAdminClient(
-	operation *operationsv1alpha1.KafkaOperation, namespace string, logger logr.Logger) (sarama.ClusterAdmin, error) {
+	operation *operationsv1alpha1.KafkaOperation,
+	namespace string, logger logr.Logger) (sarama.ClusterAdmin, error) {
 	// Create Sarama configuration
 	kafkaConfig := sarama.NewConfig()
 	kafkaConfig.Version = sarama.V3_8_1_0 // Use appropriate Kafka version
@@ -662,7 +673,9 @@ func (r *KafkaOperationReconciler) defaultGetKafkaAdminClient(
 	}
 
 	port := r.Config.KafkaPort
-	if port == "" {
+	if operation.Spec.UseTls {
+		port = "9093"
+	} else if port == "" {
 		port = "9092"
 	}
 
@@ -675,9 +688,9 @@ func (r *KafkaOperationReconciler) defaultGetKafkaAdminClient(
 
 	logger.Info("Bootstrap servers", "servers", bootstrapServers)
 
-	if r.Config.KafkaAuth {
+	if r.Config.KafkaAuth || operation.Spec.UseTls {
 		logger.Info("Loading Kafka TLS configuration")
-		if err := r.loadKafkaTLSConfig(context.Background(), namespace, clusterName, kafkaConfig); err != nil {
+		if err := r.loadKafkaTLSConfig(context.Background(), operation, namespace, kafkaConfig); err != nil {
 			logger.Error(err, "Failed to load Kafka TLS configuration")
 			return nil, err
 		}
@@ -736,9 +749,9 @@ func (r *KafkaOperationReconciler) updateStatus(ctx context.Context,
 	for retryCount < maxRetries {
 		err := r.Status().Update(ctx, operation)
 		if err == nil {
-			// If we had to retry due to conflicts, return with requeue
+			// If we had to retry due to conflicts, return with requeue to ensure proper state handling
 			if retryCount > 0 {
-				return ctrl.Result{RequeueAfter: time.Second}, nil
+				return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 			}
 			return ctrl.Result{}, nil
 		}
