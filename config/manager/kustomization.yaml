@@ -5,4 +5,4 @@ kind: Kustomization
 images:
   - name: controller
     newName: mihkels/kafka-ops-operator
-    newTag: 1.0.32
+    newTag: 1.0.41

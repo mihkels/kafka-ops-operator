@@ -69,7 +69,7 @@ type KafkaOperationSpec struct {
 	// +kubebuilder:default=false
 	AutoConfirm bool `json:"autoConfirm,omitempty"`
 
-	// Timeout for the operation
+	// Timeout specifies how long to wait (in seconds) after reducing retention before restoring it
 	// +kubebuilder:default=30
 	Timeout int `json:"timeoutSeconds,omitempty"`
 

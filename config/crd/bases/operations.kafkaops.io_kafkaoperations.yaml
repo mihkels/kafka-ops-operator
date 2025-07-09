@@ -76,7 +76,8 @@ spec:
                 type: integer
               timeoutSeconds:
                 default: 30
-                description: Timeout for the operation
+                description: Timeout specifies how long to wait (in seconds) after
+                  reducing retention before restoring it
                 type: integer
               topicName:
                 description: Reference to a Strimzi KafkaTopic resource

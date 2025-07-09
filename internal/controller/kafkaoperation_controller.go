@@ -312,12 +312,12 @@ func (r *KafkaOperationReconciler) fetchRetentionSettings(admin sarama.ClusterAd
 		return settings, err
 	}
 
-	for _, config := range topicConfig {
-		if config.Name == retentionBytesConfig {
-			settings.bytes, _ = parseConfigInt64(config.Value)
+	for _, entry := range topicConfig {
+		if entry.Name == retentionBytesConfig {
+			settings.bytes, _ = parseConfigInt64(entry.Value)
 		}
-		if config.Name == retentionMSConfig {
-			settings.ms, _ = parseConfigInt64(config.Value)
+		if entry.Name == retentionMSConfig {
+			settings.ms, _ = parseConfigInt64(entry.Value)
 		}
 	}
 	return settings, nil
@@ -420,11 +420,6 @@ func (r *KafkaOperationReconciler) executeResetTopic(ctx context.Context,
 		// Context not cancelled, proceed
 	}
 
-	if operation.Status.CurrentRetentionBytes <= 1 { // Arbitrary small value
-		logger.Info("Restoring topic retention", "topic", operation.Spec.TopicName, "originalRetention", operation.Status.OriginalRetentionBytes)
-		return r.restoreTopicRetention(ctx, operation, getNamespace(operation), logger)
-	}
-
 	admin, err := r.getKafkaAdminClient(operation, getNamespace(operation), logger)
 	if err != nil {
 		return r.handleOperationError(ctx, operation, "FailedKafkaConnection",
@@ -451,9 +446,17 @@ func (r *KafkaOperationReconciler) executeResetTopic(ctx context.Context,
 	if operation.Spec.RetentionBytes != 0 {
 		retentionBytes = operation.Spec.RetentionBytes
 	}
+
+	var retentionMs int64 = 1
+	if operation.Spec.RetentionMS != 0 {
+		retentionMs = operation.Spec.RetentionMS
+	}
+
 	retentionBytesStr := fmt.Sprintf("%d", retentionBytes)
+	retentionMsStr := fmt.Sprintf("%d", retentionMs)
 	configEntries := map[string]*string{
 		retentionBytesConfig: &retentionBytesStr,
+		retentionMSConfig:    &retentionMsStr,
 	}
 
 	// Check context again before altering config
@@ -540,7 +543,7 @@ func (r *KafkaOperationReconciler) restoreTopicRetention(ctx context.Context,
 			restoreRetentionMS = operation.Spec.RestoreRetentionMS
 		}
 		retentionMSStr := fmt.Sprintf("%d", restoreRetentionMS)
-		configEntries["retention.ms"] = &retentionMSStr
+		configEntries[retentionMSConfig] = &retentionMSStr
 	}
 
 	// Check context again before altering config
