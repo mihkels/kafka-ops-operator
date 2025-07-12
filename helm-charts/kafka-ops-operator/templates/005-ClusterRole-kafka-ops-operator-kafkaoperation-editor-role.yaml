@@ -3,7 +3,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "kafka-ops-operator.labels" . | nindent 4 }}
-  name: {{ .Chart.Name }}-kafkaoperation-editor-role
+  name: {{ include "kafka-ops-operator.fullname" . }}-kafkaoperation-editor-role
 rules:
 - apiGroups:
   - operations.kafkaops.io

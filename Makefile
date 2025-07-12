@@ -208,6 +208,27 @@ golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
+##@ Helm Charts
+.PHONY: update-helm-charts
+update-helm-charts: build-installer ## Update Helm charts with latest changes from install.yaml
+	cd helm-charts && python3 split_install_yaml.py
+	@echo "Helm charts updated. Existing templating preserved."
+
+.PHONY: helm-validate
+helm-validate: update-helm-charts ## Validate Helm charts
+	@echo "Linting Helm charts..."
+	helm lint helm-charts/kafka-ops-operator
+	@echo "Testing Helm template generation..."
+	helm template kafka-ops-operator helm-charts/kafka-ops-operator --debug --dry-run
+
+.PHONY: helm-diff
+helm-diff: ## Show differences between install.yaml and Helm-generated manifests
+	@echo "Generating manifests from Helm chart..."
+	helm template kafka-ops-operator helm-charts/kafka-ops-operator > /tmp/helm-output.yaml
+	@echo "Comparing with install.yaml..."
+	diff -u dist/install.yaml /tmp/helm-output.yaml || true
+	@rm -f /tmp/helm-output.yaml
+
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
 # $2 - package url which can be installed

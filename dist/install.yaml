@@ -83,12 +83,20 @@ spec:
                 format: int64
                 type: integer
               timeoutSeconds:
-                default: 300
-                description: Timeout for the operation in seconds
-                format: int64
+                default: 30
+                description: Timeout specifies how long to wait (in seconds) after
+                  reducing retention before restoring it
                 type: integer
               topicName:
                 description: Reference to a Strimzi KafkaTopic resource
+                type: string
+              useTls:
+                default: false
+                description: Whether to use TLS
+                type: boolean
+              username:
+                default: ""
+                description: Username for Kafka client
                 type: string
             required:
             - clusterName
@@ -321,6 +329,14 @@ metadata:
   name: kafka-ops-operator-manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - operations.kafkaops.io
   resources:
   - kafkaoperations
@@ -470,7 +486,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: mihkels/kafka-ops-operator:1.0.22
+        image: mihkels/kafka-ops-operator:1.0.41
         livenessProbe:
           httpGet:
             path: /healthz
