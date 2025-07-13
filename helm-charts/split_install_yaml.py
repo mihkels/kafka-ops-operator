@@ -130,33 +130,67 @@ def extract_image_version_from_install_yaml(content):
         return image_match.group(1)
     return None
 
+def update_yaml_field(file_path, yaml_path, new_value, field_name=None):
+    """
+    Update a specific field in a YAML file with a new value.
+
+    Args:
+        file_path: Path to the YAML file to update
+        yaml_path: Dot-separated path to the field (e.g., 'image.tag', 'appVersion')
+        new_value: New value to set
+        field_name: Optional friendly name for logging (defaults to yaml_path)
+
+    Returns:
+        bool: True if file was updated, False if no change was needed
+    """
+    if not file_path.exists():
+        print(f"Warning: {file_path} not found, skipping update")
+        return False
+
+    field_display_name = field_name or yaml_path
+
+    with open(file_path, 'r') as f:
+        content = f.read()
+
+    # Handle simple top-level fields (like appVersion)
+    if '.' not in yaml_path:
+        pattern = rf'^{re.escape(yaml_path)}:\s*["\']?[^"\'\n]*["\']?'
+        replacement = f'{yaml_path}: "{new_value}"'
+        updated_content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+    else:
+        # Handle nested fields (like image.tag)
+        parts = yaml_path.split('.')
+
+        # For now, handle common 2-level nesting (can be extended for deeper nesting)
+        if len(parts) == 2:
+            parent_field, child_field = parts
+
+            # Pattern to match the nested field within its parent section
+            pattern = rf'(^{re.escape(parent_field)}:\s*\n(?:  [^\n]*\n)*?)^  {re.escape(child_field)}:\s*["\']?[^"\'\n]*["\']?'
+            replacement = rf'\1  {child_field}: "{new_value}"'
+            updated_content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+        else:
+            print(f"Warning: Nested YAML paths with more than 2 levels not yet supported for {yaml_path}")
+            return False
+
+    if updated_content != content:
+        with open(file_path, 'w') as f:
+            f.write(updated_content)
+        print(f"Updated {file_path.name} {field_display_name} to {new_value}")
+        return True
+    else:
+        print(f"{file_path.name} {field_display_name} already up to date ({new_value})")
+        return False
+
 def update_chart_yaml(chart_dir, app_version):
     """Update Chart.yaml with the latest appVersion."""
     chart_yaml_path = chart_dir / 'Chart.yaml'
+    return update_yaml_field(chart_yaml_path, 'appVersion', app_version, 'appVersion')
 
-    if not chart_yaml_path.exists():
-        print(f"Warning: {chart_yaml_path} not found, skipping Chart.yaml update")
-        return False
-
-    with open(chart_yaml_path, 'r') as f:
-        chart_content = f.read()
-
-    # Update appVersion
-    updated_content = re.sub(
-        r'^appVersion:\s*["\']?[\d.]+["\']?',
-        f'appVersion: "{app_version}"',
-        chart_content,
-        flags=re.MULTILINE
-    )
-
-    if updated_content != chart_content:
-        with open(chart_yaml_path, 'w') as f:
-            f.write(updated_content)
-        print(f"Updated Chart.yaml appVersion to {app_version}")
-        return True
-    else:
-        print(f"Chart.yaml appVersion already up to date ({app_version})")
-        return False
+def update_values_yaml(chart_dir, image_version):
+    """Update values.yaml with the latest image tag."""
+    values_yaml_path = chart_dir / 'values.yaml'
+    return update_yaml_field(values_yaml_path, 'image.tag', image_version, 'image tag')
 
 def process_install_yaml(chart_name='kafka-ops-operator'):
     """Process install.yaml and update Helm charts."""
@@ -183,6 +217,7 @@ def process_install_yaml(chart_name='kafka-ops-operator'):
     image_version = extract_image_version_from_install_yaml(content)
     if image_version:
         update_chart_yaml(chart_dir, image_version)
+        update_values_yaml(chart_dir, image_version)
     else:
         print("Warning: Could not extract image version from install.yaml")
 

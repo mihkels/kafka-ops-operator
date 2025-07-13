@@ -3,7 +3,7 @@ kind: Service
 metadata:
   labels:
     {{- include "kafka-ops-operator.labels" . | nindent 4 }}
-  name: {{ .Chart.Name }}-controller-manager-metrics-service
+  name: {{ include "kafka-ops-operator.fullname" . }}-controller-manager-metrics-service
   namespace: {{ .Release.Namespace }}
 spec:
   ports:

@@ -486,7 +486,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: mihkels/kafka-ops-operator:1.0.41
+        image: mihkels/kafka-ops-operator:1.0.43
         livenessProbe:
           httpGet:
             path: /healthz
