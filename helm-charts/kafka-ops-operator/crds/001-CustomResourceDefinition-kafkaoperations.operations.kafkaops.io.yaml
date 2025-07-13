@@ -78,6 +78,10 @@ spec:
                 description: Timeout specifies how long to wait (in seconds) after
                   reducing retention before restoring it
                 type: integer
+              tlsVerify:
+                default: true
+                description: TLsVerify specifies whether to verify the server certificate
+                type: boolean
               topicName:
                 description: Reference to a Strimzi KafkaTopic resource
                 type: string

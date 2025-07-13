@@ -80,6 +80,12 @@ type KafkaOperationSpec struct {
 	// Whether to use TLS
 	// +kubebuilder:default=false
 	UseTls bool `json:"useTls,omitempty"`
+
+	// TLsVerify specifies whether to verify the server certificate
+	// +kubebuilder:validation:Type=boolean
+	// +kubebuilder:default=true
+	// +optional
+	TlsVerify bool `json:"tlsVerify,omitempty"`
 }
 
 type OperationState string

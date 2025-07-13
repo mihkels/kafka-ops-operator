@@ -647,11 +647,12 @@ func (r *KafkaOperationReconciler) loadKafkaTLSConfig(
 	}
 
 	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		RootCAs:            caPool,
-		MinVersion:         tls.VersionTLS12, // Ensure TLS 1.2 or higher
-		InsecureSkipVerify: true,
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caPool,
+		MinVersion:   tls.VersionTLS12, // Ensure TLS 1.2 or higher
 	}
+
+	tlsConfig.InsecureSkipVerify = operation.Spec.TlsVerify
 	kafkaConfig.Net.TLS.Enable = true
 	kafkaConfig.Net.TLS.Config = tlsConfig
 
