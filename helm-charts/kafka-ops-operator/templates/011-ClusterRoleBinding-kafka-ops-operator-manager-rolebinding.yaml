@@ -3,12 +3,12 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     {{- include "kafka-ops-operator.labels" . | nindent 4 }}
-  name: {{ .Chart.Name }}-manager-rolebinding
+  name: {{ include "kafka-ops-operator.fullname" . }}-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ .Chart.Name }}-manager-role
+  name: {{ include "kafka-ops-operator.fullname" . }}-manager-role
 subjects:
 - kind: ServiceAccount
-  name: {{ .Chart.Name }}-controller-manager
+  name: {{ include "kafka-ops-operator.fullname" . }}-controller-manager
   namespace: {{ .Release.Namespace }}

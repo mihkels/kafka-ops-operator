@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= mihkels/kafka-ops-operator:1.0.25
+IMG ?= mihkels/kafka-ops-operator:1.0.43
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -178,7 +178,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.17.2
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v1.63.4
+GOLANGCI_LINT_VERSION ?= v2.2.2
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -206,7 +206,28 @@ $(ENVTEST): $(LOCALBIN)
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+##@ Helm Charts
+.PHONY: update-helm-charts
+update-helm-charts: build-installer ## Update Helm charts with latest changes from install.yaml
+	cd helm-charts && python3 split_install_yaml.py
+	@echo "Helm charts updated. Existing templating preserved."
+
+.PHONY: helm-validate
+helm-validate: update-helm-charts ## Validate Helm charts
+	@echo "Linting Helm charts..."
+	helm lint helm-charts/kafka-ops-operator
+	@echo "Testing Helm template generation..."
+	helm template kafka-ops-operator helm-charts/kafka-ops-operator --debug --dry-run
+
+.PHONY: helm-diff
+helm-diff: ## Show differences between install.yaml and Helm-generated manifests
+	@echo "Generating manifests from Helm chart..."
+	helm template kafka-ops-operator helm-charts/kafka-ops-operator > /tmp/helm-output.yaml
+	@echo "Comparing with install.yaml..."
+	diff -u dist/install.yaml /tmp/helm-output.yaml || true
+	@rm -f /tmp/helm-output.yaml
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

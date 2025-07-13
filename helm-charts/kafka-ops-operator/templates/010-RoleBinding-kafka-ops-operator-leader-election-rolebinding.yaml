@@ -3,13 +3,13 @@ kind: RoleBinding
 metadata:
   labels:
     {{- include "kafka-ops-operator.labels" . | nindent 4 }}
-  name: {{ .Chart.Name }}-leader-election-rolebinding
+  name: {{ include "kafka-ops-operator.fullname" . }}-leader-election-rolebinding
   namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ .Chart.Name }}-leader-election-role
+  name: {{ include "kafka-ops-operator.fullname" . }}-leader-election-role
 subjects:
 - kind: ServiceAccount
-  name: {{ .Chart.Name }}-controller-manager
+  name: {{ include "kafka-ops-operator.fullname" . }}-controller-manager
   namespace: {{ .Release.Namespace }}

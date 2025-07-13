@@ -6,7 +6,9 @@ spec:
   operation: ResetTopic
   clusterName: digital-ocean-cluster
   clusterNamespace: kafka-worker
+  useTls: true
+  username: cluster.admin
   topicName: motivation
-  timeoutSeconds: 30
+  timeoutSeconds: 60
   retentionBytes: 1
   autoConfirm: true

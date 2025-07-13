@@ -1,7 +1,9 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Chart.Name }}-metrics-auth-role
+  labels:
+    {{- include "kafka-ops-operator.labels" . | nindent 4 }}
+  name: {{ include "kafka-ops-operator.fullname" . }}-metrics-auth-role
 rules:
 - apiGroups:
   - authentication.k8s.io

@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	operationsv1alpha1 "github.io/mihkels/kafka-ops-operator/api/v1alpha1"
+	"github.io/mihkels/kafka-ops-operator/internal/config"
 	"github.io/mihkels/kafka-ops-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
@@ -202,9 +203,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	cfg := config.NewConfig()
 	if err = (&controller.KafkaOperationReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Config: cfg,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KafkaOperation")
 		os.Exit(1)

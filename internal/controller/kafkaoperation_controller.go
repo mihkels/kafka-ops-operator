@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	stderrors "errors"
 	"fmt"
 	"time"
@@ -28,12 +30,14 @@ import (
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operationsv1alpha1 "github.io/mihkels/kafka-ops-operator/api/v1alpha1"
+	"github.io/mihkels/kafka-ops-operator/internal/config"
 )
 
 const (
@@ -52,12 +56,14 @@ type RetentionSettings struct {
 type KafkaOperationReconciler struct {
 	client.Client
 	Scheme              *runtime.Scheme
+	Config              *config.Config
 	getKafkaAdminClient func(operation *operationsv1alpha1.KafkaOperation, namespace string, logger logr.Logger) (sarama.ClusterAdmin, error)
 }
 
 // +kubebuilder:rbac:groups=operations.kafkaops.io,resources=kafkaoperations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operations.kafkaops.io,resources=kafkaoperations/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operations.kafkaops.io,resources=kafkaoperations/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -146,14 +152,13 @@ func (r *KafkaOperationReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if refetchedOperation.Status.State != operation.Status.State {
 			logger.Info("Resource state changed during reconciliation, requeueing",
 				"oldState", operation.Status.State, "newState", refetchedOperation.Status.State)
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 		}
 	}
 
 	return result, reconcileErr
 }
 
-// New helper function to handle state transitions
 func (r *KafkaOperationReconciler) processStateChange(ctx context.Context,
 	operation *operationsv1alpha1.KafkaOperation, logger logr.Logger) (ctrl.Result, error) {
 
@@ -187,7 +192,6 @@ func (r *KafkaOperationReconciler) processStateChange(ctx context.Context,
 	}
 
 	if operation.Status.State == operationsv1alpha1.OperationStateInProgress {
-		// Check context again before proceeding with operation
 		select {
 		case <-ctx.Done():
 			logger.Info("Context cancelled before processing operation")
@@ -308,12 +312,12 @@ func (r *KafkaOperationReconciler) fetchRetentionSettings(admin sarama.ClusterAd
 		return settings, err
 	}
 
-	for _, config := range topicConfig {
-		if config.Name == retentionBytesConfig {
-			settings.bytes, _ = parseConfigInt64(config.Value)
+	for _, entry := range topicConfig {
+		if entry.Name == retentionBytesConfig {
+			settings.bytes, _ = parseConfigInt64(entry.Value)
 		}
-		if config.Name == retentionMSConfig {
-			settings.ms, _ = parseConfigInt64(config.Value)
+		if entry.Name == retentionMSConfig {
+			settings.ms, _ = parseConfigInt64(entry.Value)
 		}
 	}
 	return settings, nil
@@ -416,11 +420,6 @@ func (r *KafkaOperationReconciler) executeResetTopic(ctx context.Context,
 		// Context not cancelled, proceed
 	}
 
-	if operation.Status.CurrentRetentionBytes <= 1 { // Arbitrary small value
-		logger.Info("Restoring topic retention", "topic", operation.Spec.TopicName, "originalRetention", operation.Status.OriginalRetentionBytes)
-		return r.restoreTopicRetention(ctx, operation, getNamespace(operation), logger)
-	}
-
 	admin, err := r.getKafkaAdminClient(operation, getNamespace(operation), logger)
 	if err != nil {
 		return r.handleOperationError(ctx, operation, "FailedKafkaConnection",
@@ -447,9 +446,17 @@ func (r *KafkaOperationReconciler) executeResetTopic(ctx context.Context,
 	if operation.Spec.RetentionBytes != 0 {
 		retentionBytes = operation.Spec.RetentionBytes
 	}
+
+	var retentionMs int64 = 1
+	if operation.Spec.RetentionMS != 0 {
+		retentionMs = operation.Spec.RetentionMS
+	}
+
 	retentionBytesStr := fmt.Sprintf("%d", retentionBytes)
+	retentionMsStr := fmt.Sprintf("%d", retentionMs)
 	configEntries := map[string]*string{
 		retentionBytesConfig: &retentionBytesStr,
+		retentionMSConfig:    &retentionMsStr,
 	}
 
 	// Check context again before altering config
@@ -536,7 +543,7 @@ func (r *KafkaOperationReconciler) restoreTopicRetention(ctx context.Context,
 			restoreRetentionMS = operation.Spec.RestoreRetentionMS
 		}
 		retentionMSStr := fmt.Sprintf("%d", restoreRetentionMS)
-		configEntries["retention.ms"] = &retentionMSStr
+		configEntries[retentionMSConfig] = &retentionMSStr
 	}
 
 	// Check context again before altering config
@@ -601,22 +608,101 @@ func (r *KafkaOperationReconciler) handleOperationError(ctx context.Context,
 	return r.updateStatus(ctx, operation, log)
 }
 
+func (r *KafkaOperationReconciler) loadKafkaTLSConfig(
+	ctx context.Context,
+	operation *operationsv1alpha1.KafkaOperation,
+	namespace string,
+	kafkaConfig *sarama.Config,
+) error {
+	secretName := ""
+	if operation.Spec.Username != "" {
+		secretName = operation.Spec.Username
+	} else {
+		secretName = r.Config.KafkaAuthUser
+		if secretName == "" {
+			return fmt.Errorf("KAFKA_AUTH_USER environment variable is not set")
+		}
+	}
+
+	var userSecret corev1.Secret
+	if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: secretName}, &userSecret); err != nil {
+		return fmt.Errorf("failed to get Kafka user secret %s in namespace %s: %w", secretName, namespace, err)
+	}
+
+	caCert := userSecret.Data["ca.crt"]
+	userCert := userSecret.Data["user.crt"]
+	userKey := userSecret.Data["user.key"]
+	if len(caCert) == 0 || len(userCert) == 0 || len(userKey) == 0 {
+		return fmt.Errorf("kafka user secret %s in namespace %s is missing required fields", secretName, namespace)
+	}
+
+	cert, err := tls.X509KeyPair(userCert, userKey)
+	if err != nil {
+		return fmt.Errorf("failed to parse TLS certificate and key from Kafka user secret %s in namespace %s: %w", secretName, namespace, err)
+	}
+
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCert) {
+		return fmt.Errorf("failed to append CA certificate from Kafka user secret %s in namespace %s", secretName, namespace)
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caPool,
+		MinVersion:   tls.VersionTLS12, // Ensure TLS 1.2 or higher
+	}
+
+	tlsConfig.InsecureSkipVerify = operation.Spec.TlsVerify
+	kafkaConfig.Net.TLS.Enable = true
+	kafkaConfig.Net.TLS.Config = tlsConfig
+
+	return nil
+}
+
 func (r *KafkaOperationReconciler) defaultGetKafkaAdminClient(
-	operation *operationsv1alpha1.KafkaOperation, namespace string, logger logr.Logger) (sarama.ClusterAdmin, error) {
+	operation *operationsv1alpha1.KafkaOperation,
+	namespace string, logger logr.Logger) (sarama.ClusterAdmin, error) {
 	// Create Sarama configuration
-	config := sarama.NewConfig()
-	config.Version = sarama.V3_8_1_0 // Use appropriate Kafka version
+	kafkaConfig := sarama.NewConfig()
+	kafkaConfig.Version = sarama.V3_8_1_0 // Use appropriate Kafka version
+
+	clusterName := ""
+	if operation.Spec.ClusterName != "" {
+		clusterName = operation.Spec.ClusterName
+	} else {
+		clusterName = r.Config.KafkaClusterName
+		if clusterName == "" {
+			return nil, fmt.Errorf("KAFKA_CLUSTER_NAME environment variable is not set")
+		}
+	}
+
+	port := r.Config.KafkaPort
+	if operation.Spec.UseTls {
+		port = "9093"
+	} else if port == "" {
+		port = "9092"
+	}
 
 	// Get bootstrap servers from Strimzi CR or Secret
-	bootstrapServers := []string{fmt.Sprintf("%s-kafka-bootstrap.%s:9092",
-		operation.Spec.ClusterName,
-		namespace),
+	bootstrapServers := []string{fmt.Sprintf("%s-kafka-bootstrap.%s:%s",
+		clusterName,
+		namespace,
+		port),
 	}
 
 	logger.Info("Bootstrap servers", "servers", bootstrapServers)
 
+	if r.Config.KafkaAuth || operation.Spec.UseTls {
+		logger.Info("Loading Kafka TLS configuration")
+		if err := r.loadKafkaTLSConfig(context.Background(), operation, namespace, kafkaConfig); err != nil {
+			logger.Error(err, "Failed to load Kafka TLS configuration")
+			return nil, err
+		}
+		logger.Info("Kafka TLS configuration loaded successfully")
+	}
+
 	// Create the admin client
-	admin, err := sarama.NewClusterAdmin(bootstrapServers, config)
+	admin, err := sarama.NewClusterAdmin(bootstrapServers, kafkaConfig)
 	if err != nil {
 		logger.Error(err, "Failed to create Kafka admin client")
 		return nil, err
@@ -667,9 +753,9 @@ func (r *KafkaOperationReconciler) updateStatus(ctx context.Context,
 	for retryCount < maxRetries {
 		err := r.Status().Update(ctx, operation)
 		if err == nil {
-			// If we had to retry due to conflicts, return with requeue
+			// If we had to retry due to conflicts, return with requeue to ensure proper state handling
 			if retryCount > 0 {
-				return ctrl.Result{RequeueAfter: time.Second}, nil
+				return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 			}
 			return ctrl.Result{}, nil
 		}

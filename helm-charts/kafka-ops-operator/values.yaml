@@ -5,9 +5,10 @@ namespace:
   name: kafkaops-operator-system
 
 image:
-  repository: microsoft/kafka-ops-operator
+  repository: mihkels/kafka-ops-operator
   pullPolicy: IfNotPresent
-  tag: "1.0.22"
+  name: kafka-ops-operator
+  tag: "1.0.43"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -22,8 +23,16 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
-podSecurityContext: {}
-securityContext: {}
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
 
 service:
   type: ClusterIP
@@ -42,22 +51,29 @@ ingress:
 
 resources:
   limits:
-    cpu: 500m
-    memory: 128Mi
+    cpu: 200m
   requests:
     cpu: 10m
     memory: 64Mi
 
+volumes: []
+volumeMounts: []
+env: []
+
 livenessProbe:
   httpGet:
-    path: /
-    port: http
+    path: /healthz
+    port: 8081
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
 readinessProbe:
   httpGet:
-    path: /
-    port: http
+    path: /readyz
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 10
 
 nodeSelector: {}
 tolerations: []
-
 affinity: {}

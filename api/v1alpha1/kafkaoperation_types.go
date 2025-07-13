@@ -41,7 +41,7 @@ type KafkaOperationSpec struct {
 
 	// Reference to a Kafka cluster
 	// +kubebuilder:validation:Required
-	ClusterName string `json:"clusterName"`
+	ClusterName string `json:"clusterName,omitempty"`
 
 	// Namespace of the Kafka cluster
 	// +optional
@@ -69,9 +69,23 @@ type KafkaOperationSpec struct {
 	// +kubebuilder:default=false
 	AutoConfirm bool `json:"autoConfirm,omitempty"`
 
-	// Timeout for the operation
+	// Timeout specifies how long to wait (in seconds) after reducing retention before restoring it
 	// +kubebuilder:default=30
 	Timeout int `json:"timeoutSeconds,omitempty"`
+
+	// Username for Kafka client
+	// +kubebuilder:default=""
+	Username string `json:"username,omitempty"`
+
+	// Whether to use TLS
+	// +kubebuilder:default=false
+	UseTls bool `json:"useTls,omitempty"`
+
+	// TLsVerify specifies whether to verify the server certificate
+	// +kubebuilder:validation:Type=boolean
+	// +kubebuilder:default=true
+	// +optional
+	TlsVerify bool `json:"tlsVerify,omitempty"`
 }
 
 type OperationState string
