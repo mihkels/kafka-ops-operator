@@ -3,21 +3,19 @@ kind: Deployment
 metadata:
   labels:
     {{- include "kafka-ops-operator.labels" . | nindent 4 }}
-  name: {{ include "kafka-ops-operator.fullname" . }}-controller-manager
+  name: {{ include "kafka-ops-operator.fullname" . }}
   namespace: {{ .Release.Namespace }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app.kubernetes.io/name: kafka-ops-operator
-      control-plane: controller-manager
   template:
     metadata:
       annotations:
         kubectl.kubernetes.io/default-container: manager
       labels:
         app.kubernetes.io/name: kafka-ops-operator
-        control-plane: controller-manager
     spec:
       containers:
       - args:
@@ -47,7 +45,7 @@ spec:
         {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      serviceAccountName: {{ include "kafka-ops-operator.fullname" . }}-controller-manager
+      serviceAccountName: {{ include "kafka-ops-operator.fullname" . }}
       terminationGracePeriodSeconds: 10
       {{- if .Values.nodeSelector }}
       nodeSelector:

@@ -3,7 +3,7 @@ kind: Service
 metadata:
   labels:
     {{- include "kafka-ops-operator.labels" . | nindent 4 }}
-  name: {{ include "kafka-ops-operator.fullname" . }}-controller-manager-metrics-service
+  name: {{ include "kafka-ops-operator.fullname" . }}-metrics-service
   namespace: {{ .Release.Namespace }}
 spec:
   ports:
@@ -13,4 +13,3 @@ spec:
     targetPort: 8443
   selector:
     app.kubernetes.io/name: {{ .Chart.Name }}
-    control-plane: controller-manager

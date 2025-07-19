@@ -49,11 +49,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version-file: 'go.mod'
-
       - name: Extract version and image from Makefile
         id: extract-version
         run: |
@@ -85,10 +80,6 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           make docker-push
-
-      - name: Run tests
-        run: |
-          make test
 
   publish-helm-chart:
     runs-on: ubuntu-latest

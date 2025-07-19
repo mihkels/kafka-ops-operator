@@ -11,5 +11,5 @@ roleRef:
   name: {{ include "kafka-ops-operator.fullname" . }}-leader-election-role
 subjects:
 - kind: ServiceAccount
-  name: {{ include "kafka-ops-operator.fullname" . }}-controller-manager
+  name: {{ include "kafka-ops-operator.fullname" . }}
   namespace: {{ .Release.Namespace }}
