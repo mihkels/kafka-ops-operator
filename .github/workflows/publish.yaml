@@ -1,11 +1,6 @@
 name: Build and Publish Controller and Helm Chart
 
 on:
-  push:
-    branches: [ main ]
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ main ]
   workflow_run:
     workflows: [ "Lint", "Test", "E2E Tests" ]
     types:
@@ -16,34 +11,12 @@ env:
   REGISTRY: docker.io
 
 jobs:
-  check-prerequisites:
+  publish:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_run'
-    outputs:
-      should-run: ${{ steps.check.outputs.should-run }}
-    steps:
-      - name: Check if prerequisite workflows succeeded
-        id: check
-        run: |
-          if [ "${{ github.event.workflow_run.conclusion }}" == "success" ]; then
-            echo "should-run=true" >> $GITHUB_OUTPUT
-          else
-            echo "should-run=false" >> $GITHUB_OUTPUT
-          fi
-
-  build-and-push:
-    runs-on: ubuntu-latest
-    needs: [ check-prerequisites ]
-    if: |
-      always() && 
-      (github.event_name != 'workflow_run' || needs.check-prerequisites.outputs.should-run == 'true')
+    if: github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
       packages: write
-
-    outputs:
-      image-tag: ${{ steps.extract-version.outputs.version }}
-      image-name: ${{ steps.extract-version.outputs.image }}
 
     steps:
       - name: Checkout repository
@@ -52,39 +25,27 @@ jobs:
       - name: Extract version and image from Makefile
         id: extract-version
         run: |
-          # Extract IMG variable from Makefile
           IMG_LINE=$(grep "^IMG ?=" Makefile | head -1)
           FULL_IMAGE=$(echo "$IMG_LINE" | cut -d'=' -f2 | tr -d ' ')
-          
-          # Extract version from image tag
           VERSION=$(echo "$FULL_IMAGE" | cut -d':' -f2)
           IMAGE_NAME=$(echo "$FULL_IMAGE" | cut -d':' -f1)
-          
-          echo "Full image: $FULL_IMAGE"
-          echo "Image name: $IMAGE_NAME" 
-          echo "Version: $VERSION"
-          
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "image=${FULL_IMAGE}" >> $GITHUB_OUTPUT
           echo "image-name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Build Docker image
-        run: |
-          make docker-build
+        run: make docker-build
 
       - name: Push Docker image
-        if: github.event_name != 'pull_request'
-        run: |
-          make docker-push
+        run: make docker-push
 
   publish-helm-chart:
     runs-on: ubuntu-latest
-    needs: build-and-push
-    if: github.event_name != 'pull_request'
+    needs: publish
+    if: success()
     permissions:
       contents: read
       packages: write
@@ -104,37 +65,11 @@ jobs:
       - name: Package and publish Helm chart
         run: |
           cd helm-charts/kafka-ops-operator
-          
-          echo "Packaging kafka-ops-operator chart"
-          echo "Using version: ${{ needs.build-and-push.outputs.version }}"
-          echo "Using image: ${{ needs.build-and-push.outputs.image }}"
-          
-          # Verify chart exists
-          if [ ! -f "Chart.yaml" ]; then
-            echo "Error: Chart.yaml not found in helm-charts/kafka-ops-operator"
-            exit 1
-          fi
-          
-          # Update dependencies if they exist
-          if [ -f "Chart.lock" ] || [ -f "requirements.yaml" ] || [ -d "charts" ]; then
-            echo "Updating chart dependencies..."
-            helm dependency update .
-          fi
-          
-          # Package the chart
-          echo "Packaging chart..."
+          helm dependency update .
           helm package .
-          
-          # Push to Docker Hub as OCI artifact
-          echo "Pushing chart to OCI registry..."
           helm push kafka-ops-operator-*.tgz oci://${{ env.REGISTRY }}/mihkels
-          
-          echo "Chart published successfully!"
 
       - name: Verify chart publication
         run: |
-          echo "Chart should be available at:"
-          echo "oci://${{ env.REGISTRY }}/mihkels/kafka-ops-operator"
-          echo ""
-          echo "Install with:"
-          echo "helm install my-kafka-ops oci://${{ env.REGISTRY }}/mihkels/kafka-ops-operator --version ${{ needs.build-and-push.outputs.version }}"
+          echo "Chart published to: oci://${{ env.REGISTRY }}/mihkels/kafka-ops-operator"
+          echo "Install with: helm install my-kafka-ops oci://${{ env.REGISTRY }}/mihkels/kafka-ops-operator --version ${{ needs.publish.outputs.version }}"
