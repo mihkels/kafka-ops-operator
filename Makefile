@@ -14,6 +14,24 @@ endif
 # tools. (i.e. podman)
 CONTAINER_TOOL ?= docker
 
+# Detect the current platform
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+
+# Set platform-specific defaults
+ifeq ($(UNAME_S),Darwin)
+    # macOS - single platform build only
+    DEFAULT_PLATFORM := linux/$(shell uname -m | sed 's/x86_64/amd64/')
+    MULTI_ARCH := false
+else
+    # Linux - multi-arch capable
+    DEFAULT_PLATFORM := linux/amd64,linux/arm64
+    MULTI_ARCH := true
+endif
+
+# Allow override via environment variable
+DOCKER_PLATFORMS ?= $(DEFAULT_PLATFORM)
+
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
@@ -104,11 +122,20 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) buildx build \
+		--provenance=true \
+		--sbom=true \
+		--platform=${DOCKER_PLATFORMS} \
+		--tag ${IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+	$(CONTAINER_TOOL) buildx build \
+		--provenance=true \
+		--sbom=true \
+		--platform=${DOCKER_PLATFORMS} \
+		--tag ${IMG} \
+		--push .
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
