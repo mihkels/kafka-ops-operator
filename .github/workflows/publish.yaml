@@ -10,17 +10,34 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 15  # Set overall job timeout
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Set up Docker with containerd image store for better performance
+      - name: Set up Docker
+        uses: docker/setup-docker-action@v4
+        with:
+          daemon-config: |
+            {
+              "features": {
+                "containerd-snapshotter": true
+              }
+            }
+
       # Add QEMU setup step for ARM emulation
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
 
       - name: Extract version and image from Makefile
         id: extract-version
@@ -37,7 +54,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ steps.extract-version.outputs.image-name }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -45,16 +62,38 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # Cache Docker layers
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
-        timeout-minutes: 15  # Set a timeout for the build step
+        timeout-minutes: 45  # Increased timeout for the build step
         with:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: mode=max
           sbom: true
           tags: ${{ steps.extract-version.outputs.image }}
-          build-args: --progress=plain
+          cache-from: |
+            type=local,src=/tmp/.buildx-cache
+            type=gha
+          cache-to: |
+            type=local,dest=/tmp/.buildx-cache-new,mode=max
+            type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      # Move cache to prevent unlimited growth
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
   # Helm chart publish
   publish-helm-chart:
@@ -87,4 +126,3 @@ jobs:
       - name: Verify chart publication
         run: |
           echo "Chart published to: oci://${{ env.REGISTRY }}/mihkels/kafka-ops-operator"
-          echo "Install with: helm install my-kafka-ops oci://${{ env.REGISTRY }}/mihkels/kafka-ops-operator --version ${{ needs.publish.outputs.version }}"
