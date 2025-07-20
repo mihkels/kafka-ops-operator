@@ -1,3 +1,11 @@
+name: Publish
+
+on:
+  workflow_run:
+    workflows: ["Tests", "Lint", "E2E Tests"]
+    types:
+      - completed
+
 jobs:
   publish:
     runs-on: ubuntu-latest
