@@ -14,6 +14,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
+    strategy:
+      matrix:
+        arch: [ amd64, arm64 ]
     permissions:
       contents: read
       packages: write
@@ -46,13 +49,13 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/${{ matrix.arch }}
           push: true
           tags: ${{ steps.extract-version.outputs.image }}
           provenance: true
           sbom: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
 
   publish-helm-chart:
     runs-on: ubuntu-latest
