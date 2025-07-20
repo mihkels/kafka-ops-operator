@@ -126,7 +126,8 @@ docker-build: ## Build docker image with the manager.
 		--provenance=true \
 		--sbom=true \
 		--platform=${DOCKER_PLATFORMS} \
-		--tag ${IMG} .
+		--tag ${IMG} \
+		--load .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
