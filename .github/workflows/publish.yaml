@@ -8,7 +8,7 @@ on:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-arm
     if: github.event.workflow_run.conclusion == 'success'
     timeout-minutes: 15  # Set overall job timeout
 
@@ -26,12 +26,6 @@ jobs:
                 "containerd-snapshotter": true
               }
             }
-
-      # Add QEMU setup step for ARM emulation
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
