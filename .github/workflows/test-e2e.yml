@@ -35,9 +35,7 @@ jobs:
         run: kind create cluster
 
       - name: Build Docker image for e2e tests
-        run: |
-          # Use single platform for local loading in e2e tests
-          DOCKER_PLATFORMS=linux/amd64 make docker-build
+        run: make docker-build-e2e
 
       - name: Load image into kind cluster
         run: |

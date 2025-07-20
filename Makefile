@@ -137,6 +137,17 @@ docker-push: ## Push docker image with the manager.
 		--tag ${IMG} \
 		--push .
 
+.PHONY: docker-build-e2e
+docker-build-e2e: ## Build docker image for e2e tests (single platform, loadable)
+	@# Use default builder to ensure --load works
+	@$(CONTAINER_TOOL) buildx use default 2>/dev/null || true
+	$(CONTAINER_TOOL) buildx build \
+		--provenance=false \
+		--sbom=false \
+		--platform=linux/amd64 \
+		--tag ${IMG} \
+		--load .
+
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
