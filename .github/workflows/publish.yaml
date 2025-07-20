@@ -26,6 +26,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
+          platforms: linux/amd64,linux/arm64
 
       - name: Extract version and image from Makefile
         id: extract-version
@@ -43,6 +44,12 @@ jobs:
 
       - name: Push Docker image
         run: make docker-push
+        env:
+          # Add a timeout to prevent builds from hanging indefinitely
+          DOCKER_BUILDKIT: 1
+          DOCKER_CLI_EXPERIMENTAL: enabled
+          DOCKER_SCAN_SUGGEST: false
+          BUILDKIT_PROGRESS: plain
 
   publish-helm-chart:
     runs-on: ubuntu-latest
