@@ -29,6 +29,17 @@ jobs:
       - name: Create kind cluster
         run: kind create cluster
 
+      - name: Build Docker image for e2e tests
+        run: |
+          # Use single platform for local loading in e2e tests
+          DOCKER_PLATFORMS=linux/amd64 make docker-build
+
+      - name: Load image into kind cluster
+        run: |
+          IMG_LINE=$(grep "^IMG ?=" Makefile | head -1)
+          FULL_IMAGE=$(echo "$IMG_LINE" | cut -d'=' -f2 | tr -d ' ')
+          kind load docker-image $FULL_IMAGE
+
       - name: Running Test e2e
         run: |
           go mod tidy
