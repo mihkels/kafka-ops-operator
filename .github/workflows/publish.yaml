@@ -7,6 +7,7 @@ on:
       - completed
 
 env:
+  REGISTRY: docker.io
   REGISTRY_IMAGE: mihkels/kafka-ops-operator
 
 jobs:
@@ -160,7 +161,7 @@ jobs:
           version: '3.12.1'
 
       - name: Log in to Docker Hub (for Helm OCI)
-        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u "${{ vars.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Package and publish Helm chart
         run: |
