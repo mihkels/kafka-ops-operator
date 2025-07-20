@@ -42,14 +42,17 @@ jobs:
       - name: Log in to Docker Hub
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-      - name: Push Docker image
-        run: make docker-push
-        env:
-          # Add a timeout to prevent builds from hanging indefinitely
-          DOCKER_BUILDKIT: 1
-          DOCKER_CLI_EXPERIMENTAL: enabled
-          DOCKER_SCAN_SUGGEST: false
-          BUILDKIT_PROGRESS: plain
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.extract-version.outputs.image }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   publish-helm-chart:
     runs-on: ubuntu-latest
