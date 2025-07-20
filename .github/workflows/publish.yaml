@@ -1,15 +1,3 @@
-name: Build and Publish Controller and Helm Chart
-
-on:
-  workflow_run:
-    workflows: [ "Lint", "Test", "E2E Tests" ]
-    types:
-      - completed
-    branches: [ main ]
-
-env:
-  REGISTRY: docker.io
-
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -24,6 +12,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # Add QEMU setup step for ARM emulation
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -47,6 +39,7 @@ jobs:
 
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
+        timeout-minutes: 15  # Set a timeout for the build step
         with:
           context: .
           platforms: linux/${{ matrix.arch }}
@@ -56,7 +49,10 @@ jobs:
           sbom: true
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+          # Enable plain progress for verbose logs
+          build-args: --progress=plain
 
+  # Helm chart publish
   publish-helm-chart:
     runs-on: ubuntu-latest
     needs: publish
