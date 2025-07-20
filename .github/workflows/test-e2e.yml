@@ -12,6 +12,11 @@ jobs:
       - name: Clone the code
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
