@@ -34,15 +34,6 @@ jobs:
       - name: Create kind cluster
         run: kind create cluster
 
-      - name: Build Docker image for e2e tests
-        run: make docker-build-e2e
-
-      - name: Load image into kind cluster
-        run: |
-          IMG_LINE=$(grep "^IMG ?=" Makefile | head -1)
-          FULL_IMAGE=$(echo "$IMG_LINE" | cut -d'=' -f2 | tr -d ' ')
-          kind load docker-image $FULL_IMAGE
-
       - name: Running Test e2e
         run: |
           go mod tidy
