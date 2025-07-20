@@ -8,7 +8,7 @@ on:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest-arm
+    runs-on: ubuntu-24.04-arm
     if: github.event.workflow_run.conclusion == 'success'
     timeout-minutes: 15  # Set overall job timeout
 
